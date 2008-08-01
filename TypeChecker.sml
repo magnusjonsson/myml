@@ -1,8 +1,8 @@
-structure Interpreter = struct
+structure TypeChecker = struct
   type name = string
 
-  datatype value = Int of int
-                 | Bool of bool
+  datatype value = Int
+                 | Bool
                  | Record of (string * value) list
                  | Proc of value -> value
                  | Void
@@ -39,22 +39,24 @@ structure Interpreter = struct
           AbstractInterpreter.Env.empty
           [
            ("intAdd",Proc (fn args => case matchPair args of
-                                          (Int a,Int b) => Int (a+b)
+                                          (Int,Int) => Int
                                         | _ => raise BuiltinExn)),
            ("intMul",Proc (fn args => case matchPair args of
-                                          (Int a,Int b) => Int (a*b)
+                                          (Int,Int) => Int
                                         | _ => raise BuiltinExn)),
            ("intEqual",Proc (fn args => case matchPair args of
-                                            (Int a,Int b) => Bool (a=b)
+                                            (Int,Int) => Bool
                                           | _ => raise BuiltinExn)),
            ("intLess",Proc (fn args => case matchPair args of
-                                           (Int a,Int b) => Bool (a<b)
+                                           (Int,Int) => Bool
                                          | _ => raise BuiltinExn)),
            ("dup",Proc (fn x => Record [("0",x),("1",x)])),
            ("intPrint",Proc (fn x => case x of
-                                         Int i => (TextIO.print (Int.toString i); Void)
+                                         Int => Void
                                        | _ => raise BuiltinExn)),
-           ("newLine",Proc (fn Void => (TextIO.print "\n"; Void)))
+           ("newLine",Proc (fn x => case x of
+                                        Void => Void
+                                      | _ => raise BuiltinExn))
           ]
 
   fun apply (value,function) =
@@ -63,8 +65,8 @@ structure Interpreter = struct
         | _ => raise Apply (function,value)
 
   val target : value AbstractInterpreter.target = {
-      makeInt = Int,
-      makeBool = Bool,
+      makeInt = (fn _ => Int),
+      makeBool = (fn _ => Bool),
       makeRecord = Record,
       makeProc = Proc,
       apply = apply,
@@ -73,5 +75,5 @@ structure Interpreter = struct
   val eval = AbstractInterpreter.eval target
   val run = AbstractInterpreter.run target
 
-  fun interpret prog = eval initialEnv prog
+  fun check prog = eval initialEnv prog
 end

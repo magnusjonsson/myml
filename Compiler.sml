@@ -1,5 +1,8 @@
+(* TODO: compiler should output code into a file and then call gcc. *)
+
 structure Compiler = struct
   type cname = string
+  type ctype = string
   type name = string
 
   datatype value = Int of cname
@@ -12,34 +15,42 @@ structure Compiler = struct
   exception BuiltinExn
   exception RecordRef of value * string
 
+  val localOutput : string list ref = ref []
+  fun push location value = location := value :: !location
+  fun globalPrint string = TextIO.print string
+  fun localPrint string = push localOutput string
+  fun flushLocal () =
+      (List.app globalPrint (List.rev (! localOutput));
+       localOutput := [])
+
   val gensymCounter = ref 0
-  fun gensym () =
+  fun gensym prefix =
       let val c = !gensymCounter in
           gensymCounter := 1+c;
-          "gensym"^Int.toString c
+          prefix^Int.toString c
       end
-  fun mangle name = "x"^name
+  fun mangle name = "f"^name
 
   fun makeValue (ctype,cexpr) =
       let
-          val name = gensym()
+          val name = gensym "v"
       in
-          TextIO.print (String.concat [ctype," ",name,"=",cexpr,";\n"]);
+          localPrint (String.concat [ctype," ",name," = ",cexpr,";\n"]);
           name
       end
 
   fun makeStruct fields =
       let
-          val structName = gensym()
+          val structName = gensym "s"
       in
-          TextIO.print
+          globalPrint
           (String.concat
            (List.concat
             [["struct ",structName," { "],
              List.map (fn (fieldName,fieldType) =>
                           String.concat [fieldType," ",mangle fieldName,"; "])
                       fields,
-             ["}\n"]]));
+             ["};\n"]]));
           "struct "^structName
       end
 
@@ -69,13 +80,11 @@ structure Compiler = struct
   fun makeRecord fields =
       let
           val structName = makeStruct (List.map (fn (name,value) => (name,ctype value)) fields)
-          val recordName = gensym ()
+          val recordName = makeValue (structName, String.concat
+                                                  (List.concat [["{ "],
+                                                                List.map (fn (name,value) => cname value^", ") fields,
+                                                                ["}"]]))
       in
-          TextIO.print
-          (String.concat
-               (List.concat [[structName," ",recordName," = { "],
-                             List.map (fn (name,value) => cname value^", ") fields,
-                             ["};\n"]]));
           Record (recordName,fields)
       end
 
@@ -100,26 +109,26 @@ structure Compiler = struct
           AbstractInterpreter.Env.empty
           [
            ("intAdd",Proc (fn args => case matchPair args of
-                                          (Int a,Int b) => Int (makeValue ("int",String.concat [a,"+",b]))
+                                          (Int a,Int b) => Int (makeValue ("int",String.concat [a," + ",b]))
                                         | _ => raise BuiltinExn)),
            ("intMul",Proc (fn args => case matchPair args of
-                                          (Int a,Int b) => Int (makeValue ("int",String.concat [a,"*",b]))
+                                          (Int a,Int b) => Int (makeValue ("int",String.concat [a," * ",b]))
                                         | _ => raise BuiltinExn)),
            ("intEqual",Proc (fn args => case matchPair args of
-                                            (Int a,Int b) => Bool (makeValue ("int",String.concat [a,"==",b]))
+                                            (Int a,Int b) => Bool (makeValue ("int",String.concat [a," == ",b]))
                                           | _ => raise BuiltinExn)),
            ("intLess",Proc (fn args => case matchPair args of
-                                           (Int a,Int b) => Bool (makeValue ("int",String.concat [a,"<",b]))
+                                           (Int a,Int b) => Bool (makeValue ("int",String.concat [a," < ",b]))
                                          | _ => raise BuiltinExn)),
            ("dup",Proc (fn x => makeRecord [("0",x),("1",x)])),
            ("intPrint",Proc (fn x => case x of
                                          Int name =>
-                                         (TextIO.print (String.concat
-                                                            ["printf(\"%i\",",name,");\n"]);
+                                         (localPrint (String.concat
+                                                          ["printf(\"%i\",",name,");\n"]);
                                           Void)
                                        | _ => raise BuiltinExn)),
            ("newLine",Proc (fn x => case x of 
-                                        Void => (TextIO.print "printf(\"\\n\");"; Void)
+                                        Void => (localPrint "printf(\"\\n\");\n"; Void)
                                       | _ => raise BuiltinExn))
           ]
 
@@ -141,4 +150,12 @@ structure Compiler = struct
   }
   val eval = AbstractInterpreter.eval target
   val run = AbstractInterpreter.run target
+
+  fun compile prog = 
+      eval initialEnv prog
+      before (globalPrint "int main() {\n";
+              flushLocal ();
+              globalPrint "return 0;\n";
+              globalPrint "}\n"
+             )
 end

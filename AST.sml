@@ -9,9 +9,4 @@ structure AST = struct
          | RecordRef of expr * string
   datatype binding = Define of { name : string,
                                  expr : expr }
-  datatype module = Module of  { name : string,
-                                 exports : string list,
-                                 imports : string list,
-                                 bindings : binding list
-                               }
 end
