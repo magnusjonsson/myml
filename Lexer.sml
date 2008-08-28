@@ -3,14 +3,15 @@ structure Lexer = struct
 		  | Int of int
 		  | LParen
 		  | Comma
+		  | Dot
 		  | RParen
 		  | Colon
 		  | Unexpected of char
 		  | Eof
-  datatype state = Cons of lexeme * lexer
+  datatype state = Cons of lexeme * stream
 		 | Nil
 		 | Unparsed of TextIO.StreamIO.instream
-  withtype lexer = state ref
+  withtype stream = state ref
 
   fun make stream = ref (Unparsed stream)
 
@@ -67,6 +68,7 @@ structure Lexer = struct
 			    #"(" => yield (LParen,stream)
 			  | #")" => yield (RParen,stream)
 			  | #":" => yield (Colon,stream)
+			  | #"." => yield (Dot,stream)
 			  | _ => yield (Unexpected char,stream)
 		       )
 	       end

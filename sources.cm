@@ -2,9 +2,9 @@ Group is
 $/basis.cm
 $/smlnj-lib.cm
 AST.sml
+Lexer.sml
 Parser.sml
 Pretty.sml
-../mjlib/gen.sml
 ../mjlib/StringKey.sml
 ../mjlib/StringMap.sml
 AbstractInterpreter.sml

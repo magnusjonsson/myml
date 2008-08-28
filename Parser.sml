@@ -1,37 +1,34 @@
 structure Parser = struct
-  structure Stream = TextIO.StreamIO
-  type 'a parser = Stream.instream -> ('a * Stream.instream) option 
+  type 'a parser = Lexer.stream -> ('a * Lexer.stream) option
   fun dropWhile pred =
       let
           fun done stream = SOME ((), stream)
           fun loop stream =
-              case Stream.input1 stream of
-                  NONE => done stream
-                | SOME (t, stream') => if pred t then
-                                          loop stream'
-                                      else
-                                          done stream
+              case Lexer.input1 stream of
+		  (token,stream') => if pred token then
+					 loop stream'
+				     else
+					 done stream
       in
           loop
       end
-  val dropWhite = dropWhile Char.isSpace
-  fun matchChar c1 stream =
-      case Stream.input1 stream of
-          NONE => NONE
-        | SOME (c, stream) => if c = c1 then SOME (c,stream) else NONE
-  fun takeWhile1 pred : Char.char list parser =
+  fun matchToken t1 stream =
+      case Lexer.input1 stream of
+	  (t, stream) => if t = t1 then SOME (t,stream) else NONE
+(*
+  fun takeWhile1 pred : Lexer.lexeme list parser =
       let
           fun done taken stream = if List.null taken then NONE else SOME (List.rev taken, stream)
           fun loop taken stream =
-              case Stream.input1 stream of
-                  NONE => done taken stream
-                | SOME (t, stream') => if pred t then
-                                           loop (t::taken) stream'
-                                       else
-                                           done taken stream
+              case Lexer.input1 stream of
+		  (t, stream') => if pred t then
+				      loop (t::taken) stream'
+				  else
+				      done taken stream
       in
           loop []
       end
+*)
   val nop : unit parser = fn stream => SOME ((),stream)
   fun result (f : 'x -> 'y) (p : 'x parser) : 'y parser =
       fn stream =>
@@ -66,22 +63,19 @@ structure Parser = struct
            | p::pr => case p stream of
                           NONE => alt pr stream
                         | result => result
-  fun isIdentifierCharacter c = Char.isAlphaNum c
-  val identifier = result String.implode (takeWhile1 isIdentifierCharacter)
-  fun theIdentifier (name:string) = guard (fn n => n = name) identifier
-  val takeDigits1 = takeWhile1 Char.isDigit
   fun first (p1,p2) : 'a parser = result #1 (seq (p1,p2))
   fun second (p1,p2) : 'a parser = result #2 (seq (p1,p2))
-  val parseInt =
-      result (AST.Int o valOf o Int.fromString o String.implode)
-             (alt [result (fn (a,b) => #"~" :: b) (seq (matchChar #"-", takeDigits1)),
-                   takeDigits1])
-  val parseBool = alt [const (AST.Bool true) (theIdentifier "true"),
-                       const (AST.Bool false) (theIdentifier "false")]
-  val parseId = result AST.Id identifier
-  fun parseTerm () : AST.expr parser = alt [parseInt, parseBool, parseId, parseParenExpr ()]
+  fun parseInt stream =
+      case Lexer.input1 stream of
+	  (Lexer.Int value, stream') => SOME (AST.Int value, stream')
+	| _ => NONE
+  fun parseId stream =
+      case Lexer.input1 stream of
+	  (Lexer.Id name, stream') => SOME (AST.Id name, stream')
+	| _ => NONE
+  fun parseTerm () : AST.expr parser = alt [parseInt, parseId, parseParenExpr ()]
   and parseExprTail (x : AST.expr) : AST.expr parser =
-      alt [seq' (matchChar #".",
+      alt [seq' (matchToken Lexer.Dot,
                  (fn _ => seq' (result (fn y => AST.Apply (x,y))
                                        (parseTerm ()),
                                 parseExprTail))),
@@ -89,13 +83,13 @@ structure Parser = struct
   and parseExpr () : AST.expr parser =
       fn stream => (seq' (parseTerm (), parseExprTail)) stream
   and parseParenExpr () : AST.expr parser =
-      second (matchChar #"(", first (parseExpr (), matchChar #")"))
+      second (matchToken Lexer.LParen, first (parseExpr (), matchToken Lexer.RParen))
   val parse = parseExpr ()
   fun parseFile fileName =
       let
           val stream = TextIO.openIn fileName
       in
-          parse (TextIO.getInstream stream)
+          parse (Lexer.make (TextIO.getInstream stream))
           before TextIO.closeIn stream
       end
 end
