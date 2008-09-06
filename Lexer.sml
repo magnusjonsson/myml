@@ -69,6 +69,7 @@ structure Lexer = struct
 			  | #")" => yield (RParen,stream)
 			  | #":" => yield (Colon,stream)
 			  | #"." => yield (Dot,stream)
+			  | #"," => yield (Comma,stream)
 			  | _ => yield (Unexpected char,stream)
 		       )
 	       end

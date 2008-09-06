@@ -29,6 +29,13 @@ structure AbstractInterpreter = struct
           in
               #apply target (value,function)
           end
+	| AST.Pair (e1,e2) =>
+	  let
+	      val v1 = eval target env e1
+	      val v2 = eval target env e2
+	  in
+	      #makeRecord target [("0",v1),("1",v2)]
+	  end
         | AST.Record fields =>
           #makeRecord target (List.map (fn (name,expr) => (name,eval target env expr)) fields)
         | AST.RecordRef (expr,name) =>

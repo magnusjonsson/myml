@@ -15,34 +15,19 @@ structure Parser = struct
   fun matchToken t1 stream =
       case Lexer.input1 stream of
 	  (t, stream) => if t = t1 then SOME (t,stream) else NONE
-(*
-  fun takeWhile1 pred : Lexer.lexeme list parser =
-      let
-          fun done taken stream = if List.null taken then NONE else SOME (List.rev taken, stream)
-          fun loop taken stream =
-              case Lexer.input1 stream of
-		  (t, stream') => if pred t then
-				      loop (t::taken) stream'
-				  else
-				      done taken stream
-      in
-          loop []
-      end
-*)
-  val nop : unit parser = fn stream => SOME ((),stream)
   fun result (f : 'x -> 'y) (p : 'x parser) : 'y parser =
       fn stream =>
          case p stream of
              NONE => NONE
            | SOME (x, stream) => SOME (f x, stream)
-  fun const (y : 'y) (p : 'x parser) : 'y parser =
-      result (fn _ => y) p
+  val nop : unit parser = fn stream => SOME ((),stream)
+  fun return x stream = SOME (x,stream)
   fun guard (pred : 'x -> bool) (p : 'x parser) : 'x parser =
       fn stream =>
          case p stream of
              NONE => NONE
            | SOME (x, stream) => if pred x then SOME (x, stream) else NONE
-  fun seq  (p1 : 'x parser , p2  : 'y parser) : ('x * 'y) parser =
+  fun && (p1 : 'x parser , p2  : 'y parser) : ('x * 'y) parser =
       fn stream =>
          case p1 stream of
              NONE => NONE
@@ -51,11 +36,13 @@ structure Parser = struct
                  NONE => NONE
                | SOME (y, stream) =>
                  SOME ((x, y), stream)
-  fun seq' (p1 : 'x parser, mkp2 : 'x -> 'y parser) : 'y parser =
+  infix &&
+  fun >>= (p1 : 'x parser, mkp2 : 'x -> 'y parser) : 'y parser =
       fn stream =>
          case p1 stream of
              NONE => NONE
            | SOME (x,stream) => mkp2 x stream
+  infix >>=
   fun alt (ps : 'x parser list) : 'x parser =
       fn stream =>
          case ps of
@@ -63,8 +50,8 @@ structure Parser = struct
            | p::pr => case p stream of
                           NONE => alt pr stream
                         | result => result
-  fun first (p1,p2) : 'a parser = result #1 (seq (p1,p2))
-  fun second (p1,p2) : 'a parser = result #2 (seq (p1,p2))
+  fun first (p1,p2) : 'a parser = result #1 (p1 && p2)
+  fun second (p1,p2) : 'a parser = result #2 (p1 && p2)
   fun parseInt stream =
       case Lexer.input1 stream of
 	  (Lexer.Int value, stream') => SOME (AST.Int value, stream')
@@ -75,13 +62,13 @@ structure Parser = struct
 	| _ => NONE
   fun parseTerm () : AST.expr parser = alt [parseInt, parseId, parseParenExpr ()]
   and parseExprTail (x : AST.expr) : AST.expr parser =
-      alt [seq' (matchToken Lexer.Dot,
-                 (fn _ => seq' (result (fn y => AST.Apply (x,y))
-                                       (parseTerm ()),
-                                parseExprTail))),
-           const x nop]
+      alt [matchToken Lexer.Dot >>=
+		      (fn _ => result AST.Apply (return x && parseTerm ())) >>= parseExprTail,
+	   matchToken Lexer.Comma >>=
+		      (fn _ => result AST.Pair (return x && parseTerm ())) >>= parseExprTail,
+           return x]
   and parseExpr () : AST.expr parser =
-      fn stream => (seq' (parseTerm (), parseExprTail)) stream
+      fn stream => (parseTerm () >>= parseExprTail) stream
   and parseParenExpr () : AST.expr parser =
       second (matchToken Lexer.LParen, first (parseExpr (), matchToken Lexer.RParen))
   val parse = parseExpr ()

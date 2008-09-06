@@ -1,1 +1,1 @@
-15.dup.intMul.intPrint.newLine
+(3.dup.intMul),(4.dup.intMul).intAdd.intPrint

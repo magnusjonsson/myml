@@ -99,9 +99,11 @@ structure Compiler = struct
         | _ =>
           raise MatchRecord (value,fieldNames)
 
+  exception MatchPair
   fun matchPair value =
       case matchRecord (value,["0","1"]) of
           [a,b] => (a,b)
+	| _ => raise MatchPair
 
   val initialEnv : value AbstractInterpreter.Env.map =
       List.foldl
@@ -151,7 +153,7 @@ structure Compiler = struct
   val eval = AbstractInterpreter.eval target
   val run = AbstractInterpreter.run target
 
-  fun compile prog = 
+  fun compile (prog : AST.expr) =
       eval initialEnv prog
       before (globalPrint "int main() {\n";
               flushLocal ();

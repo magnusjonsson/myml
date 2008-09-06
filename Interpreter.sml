@@ -6,9 +6,10 @@ structure Interpreter = struct
                  | Record of (string * value) list
                  | Proc of value -> value
                  | Void
+		 | TypeError of string
 
   exception Apply of value * value
-  exception BuiltinExn
+  exception BuiltinExn of string
   exception RecordRef of value * string
 
   fun recordRef (value,name) =
@@ -29,9 +30,11 @@ structure Interpreter = struct
         | _ =>
           raise MatchRecord (value,fieldNames)
 
+  exception MatchPair
   fun matchPair value =
       case matchRecord (value,["0","1"]) of
           [a,b] => (a,b)
+	| _ => raise MatchPair
 
   val initialEnv : value AbstractInterpreter.Env.map =
       List.foldl
@@ -40,21 +43,22 @@ structure Interpreter = struct
           [
            ("intAdd",Proc (fn args => case matchPair args of
                                           (Int a,Int b) => Int (a+b)
-                                        | _ => raise BuiltinExn)),
+                                        | _ => raise BuiltinExn "intAdd")),
            ("intMul",Proc (fn args => case matchPair args of
                                           (Int a,Int b) => Int (a*b)
-                                        | _ => raise BuiltinExn)),
+                                        | _ => raise BuiltinExn "intMul")),
            ("intEqual",Proc (fn args => case matchPair args of
                                             (Int a,Int b) => Bool (a=b)
-                                          | _ => raise BuiltinExn)),
+                                          | _ => raise BuiltinExn "intEqual")),
            ("intLess",Proc (fn args => case matchPair args of
                                            (Int a,Int b) => Bool (a<b)
-                                         | _ => raise BuiltinExn)),
+                                         | _ => raise BuiltinExn "intLess")),
            ("dup",Proc (fn x => Record [("0",x),("1",x)])),
            ("intPrint",Proc (fn x => case x of
                                          Int i => (TextIO.print (Int.toString i); Void)
-                                       | _ => raise BuiltinExn)),
-           ("newLine",Proc (fn Void => (TextIO.print "\n"; Void)))
+				       | _ => raise BuiltinExn "intPrint")),
+           ("newLine",Proc (fn Void => (TextIO.print "\n"; Void)
+			     | _ => raise BuiltinExn "newLine"))
           ]
 
   fun apply (value,function) =
@@ -73,5 +77,7 @@ structure Interpreter = struct
   val eval = AbstractInterpreter.eval target
   val run = AbstractInterpreter.run target
 
-  fun interpret prog = eval initialEnv prog
+  fun interpret prog =
+      eval initialEnv prog
+      handle BuiltinExn what => TypeError what
 end
