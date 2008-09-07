@@ -38,8 +38,12 @@ structure Compiler = struct
           localPrint (String.concat [ctype," ",name," = ",cexpr,";\n"]);
           name
       end
-
-  fun makeStruct fields =
+  val structs = ref [] : ((string * string) list * string) list ref
+  fun findStruct fields =
+      case List.find (fn (fields2,name) => fields = fields2) (!structs) of
+	  NONE => NONE
+	| SOME (fields2,name) => SOME name
+  fun newStruct fields =
       let
           val structName = gensym "s"
       in
@@ -53,6 +57,16 @@ structure Compiler = struct
              ["};\n"]]));
           "struct "^structName
       end
+  fun makeStruct fields =
+      case findStruct fields of
+	  NONE =>
+	  let
+	      val name = newStruct fields
+	  in
+	      structs := (fields,name) :: !structs;
+	      name
+	  end
+	| SOME name => name
 
   fun cname value =
       case value of
@@ -158,6 +172,7 @@ structure Compiler = struct
       before (globalPrint "int main() {\n";
               flushLocal ();
               globalPrint "return 0;\n";
-              globalPrint "}\n"
+              globalPrint "}\n";
+	      structs := []
              )
 end
